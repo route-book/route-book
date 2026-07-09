@@ -376,8 +376,7 @@ function fbSave(silent){
   var ref=db.ref('dossiers/'+clanId);
   ref.child('current').set(data).then(function(){
     if(!silent){
-      if(typeof toast==='function') toast('☁ Sauvegardé');
-      else showFbToast('☁ Sauvegardé');
+      showFbToast('☁ Sauvegardé en ligne');
     }
     ref.child('history/'+data.savedAt).set(data);
     ref.child('history').orderByKey().once('value').then(function(s){
