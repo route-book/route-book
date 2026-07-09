@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Route-Book</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--g:#2f4a24;--go:#c9973a;--cr:#f6f1e3;--tl:#6b6353;--bo:#b9ab8d;--red:#b03030}
+body{font-family:'Georgia',serif;background:var(--cr);min-height:100vh}
+
+#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(ellipse at 60% 40%,#3a5c2e,#1e2f16)}
+.login-box{background:var(--cr);border:2px solid var(--go);border-radius:10px;max-width:400px;width:100%;padding:36px 32px;box-shadow:0 8px 40px rgba(0,0,0,.4)}
+.login-box h1{font-family:'Georgia',serif;font-size:1.8rem;font-weight:normal;color:var(--g);text-align:center;margin-bottom:24px;letter-spacing:.04em}
+.lf{margin-bottom:16px}
+.lf label{display:block;font-family:'Courier New',monospace;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--tl);margin-bottom:5px}
+.lf input{width:100%;padding:10px 12px;border:1.5px solid var(--bo);border-radius:5px;font-size:16px;background:#fff;font-family:inherit}
+.lf input:focus{outline:none;border-color:var(--g)}
+#btn-login{width:100%;background:var(--g);color:var(--cr);border:none;padding:12px;border-radius:5px;font-family:'Courier New',monospace;font-size:.85rem;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;margin-top:4px}
+#btn-login:hover{background:#3d6030}
+#btn-login:disabled{opacity:.6;cursor:default}
+.login-err{color:var(--red);font-size:.85rem;min-height:20px;margin-top:10px;text-align:center}
+
+#loading-screen{min-height:100vh;display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+.spinner{width:40px;height:40px;border:3px solid var(--bo);border-top-color:var(--g);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-txt{font-family:'Courier New',monospace;font-size:.8rem;letter-spacing:.1em;text-transform:uppercase;color:var(--tl);text-align:center;max-width:300px}
+
+#dossier-screen{display:none}
+
+#hist-panel{position:fixed;top:0;right:0;bottom:0;width:300px;background:#fff;border-left:2px solid var(--bo);display:flex;flex-direction:column;z-index:9999;transform:translateX(100%);transition:transform .25s;box-shadow:-4px 0 20px rgba(0,0,0,.2)}
+#hist-panel.open{transform:translateX(0)}
+#hist-hdr{padding:12px 16px;background:var(--g);color:var(--cr);display:flex;align-items:center;justify-content:space-between;font-family:'Courier New',monospace;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;flex-shrink:0}
+#hist-list{flex:1;overflow-y:auto}
+.hitem{border-bottom:1px solid #eee;padding:11px 14px}
+.hitem.cur{background:#f0f5ea;border-left:3px solid var(--g)}
+.hdate{font-family:'Courier New',monospace;font-size:.7rem;color:var(--tl)}
+.hby{font-size:.82rem;color:#2a1f12;margin-top:2px}
+.hbtn{margin-top:7px;background:var(--g);color:var(--cr);border:none;padding:4px 12px;border-radius:3px;font-family:'Courier New',monospace;font-size:.65rem;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+.hbtn:hover{background:#3d6030}
+.hempty{padding:20px;text-align:center;color:var(--tl);font-size:.85rem;font-style:italic}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-box">
+    <h1>Route-Book</h1>
+    <div class="lf">
+      <label>Email</label>
+      <input type="email" id="li-email" autocomplete="email" placeholder="clan@route-book.be">
+    </div>
+    <div class="lf">
+      <label>Mot de passe / Wachtwoord</label>
+      <input type="password" id="li-pass" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <button id="btn-login">Connexion / Inloggen</button>
+    <div class="login-err" id="li-err"></div>
+  </div>
+</div>
+
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <div class="loading-txt" id="loading-txt">Chargement…</div>
+</div>
+
+<div id="dossier-screen"></div>
+
+<div id="hist-panel">
+  <div id="hist-hdr">
+    <span>Historique</span>
+    <button onclick="toggleHist()" style="background:none;border:none;color:var(--cr);cursor:pointer;font-size:1rem">✕</button>
+  </div>
+  <div id="hist-list"></div>
+</div>
+
+<script>
+// ── Config (inline, aucune dépendance externe pour le login) ──────────
+var FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyB3f3dMpmt7NK-1b-L1cew0yalWToHGpQM",
+  authDomain:        "dossier-route.firebaseapp.com",
+  projectId:         "dossier-route",
+  databaseURL:       "https://dossier-route-default-rtdb.europe-west1.firebasedatabase.app",
+  storageBucket:     "dossier-route.firebasestorage.app",
+  messagingSenderId: "262600923353",
+  appId:             "1:262600923353:web:834858e6b372129b2b86c8"
+};
+var KNOWN_CLANS = [
+  { id:'damiaan',  label:'Clan Damiaan'  },
+  { id:'godefroy', label:'Clan Godefroy' },
+  { id:'kolbe',    label:'Clan Kolbe'    }
+];
+
+// ── État ──────────────────────────────────────────────────────────────
+var auth, db, currentUser, clanId, saveTimer, histOpen=false;
+var DEBOUNCE = 3000;
+
+// ── Utilitaires ───────────────────────────────────────────────────────
+function showScreen(id){
+  ['login-screen','loading-screen','dossier-screen'].forEach(function(s){
+    document.getElementById(s).style.display = s===id?(s==='dossier-screen'?'block':'flex'):'none';
+  });
+}
+function setLoading(txt){
+  document.getElementById('loading-txt').textContent = txt||'Chargement…';
+  showScreen('loading-screen');
+}
+function fmtDate(ts){
+  if(!ts) return '—';
+  var d=new Date(ts);
+  return d.toLocaleDateString('fr-BE')+' '+d.toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'});
+}
+function escH(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function showFbToast(msg){
+  var t=document.getElementById('fb-toast');
+  if(!t){
+    t=document.createElement('div');
+    t.id='fb-toast';
+    t.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2f4a24;color:#f6f1e3;padding:9px 20px;border-radius:5px;font-family:Courier New,monospace;font-size:.78rem;z-index:99999;pointer-events:none;transition:opacity .3s';
+    document.body.appendChild(t);
+  }
+  t.textContent=msg; t.style.opacity='1';
+  clearTimeout(t._timer);
+  t._timer=setTimeout(function(){t.style.opacity='0';},2500);
+}
+
+// ── Login (disponible immédiatement, Firebase chargé dynamiquement) ───
+document.getElementById('btn-login').addEventListener('click', doLogin);
+document.getElementById('li-pass').addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
+document.getElementById('li-email').addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
+
+function doLogin(){
+  var email = document.getElementById('li-email').value.trim();
+  var pass  = document.getElementById('li-pass').value;
+  var err   = document.getElementById('li-err');
+  err.textContent = '';
+  if(!email||!pass){ err.textContent='Remplissez les deux champs.'; return; }
+  document.getElementById('btn-login').disabled = true;
+  setLoading('Connexion…');
+  loadFirebase(function(){
+    auth.signInWithEmailAndPassword(email, pass).catch(function(e){
+      document.getElementById('btn-login').disabled = false;
+      showScreen('login-screen');
+      err.textContent = (e.code==='auth/wrong-password'||e.code==='auth/user-not-found'||e.code==='auth/invalid-credential')
+        ? 'Email ou mot de passe incorrect.'
+        : e.message;
+    });
+  });
+}
+
+// ── Charger Firebase SDK dynamiquement ────────────────────────────────
+var fbLoaded = false;
+var fbCallbacks = [];
+function loadFirebase(cb){
+  
+  if(fbLoaded){ cb(); return; }
+  fbCallbacks.push(cb);
+  if(fbCallbacks.length > 1) return; // déjà en cours
+  var sdks = [
+    'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
+    'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js',
+    'https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js'
+  ];
+  var loaded = 0;
+  sdks.forEach(function(src){
+    var s = document.createElement('script');
+    s.src = src;
+    s.onload = function(){
+      loaded++;
+      if(loaded === sdks.length){
+        firebase.initializeApp(FIREBASE_CONFIG);
+        auth = firebase.auth();
+        db   = firebase.database();
+        fbLoaded = true;
+        auth.onAuthStateChanged(onAuthChanged);
+        fbCallbacks.forEach(function(fn){ fn(); });
+        fbCallbacks = [];
+      }
+    };
+    s.onerror = function(){
+      document.getElementById('btn-login').disabled = false;
+      showScreen('login-screen');
+      document.getElementById('li-err').textContent = 'Erreur réseau — vérifiez votre connexion.';
+    };
+    document.head.appendChild(s);
+  });
+}
+
+// ── Auth listener ─────────────────────────────────────────────────────
+function onAuthChanged(user){
+  if(!user){
+    document.querySelector('.login-box').innerHTML=
+      '<h1>Route-Book</h1>'+
+      '<div class="lf"><label>Email</label>'+
+        '<input type="email" id="li-email" autocomplete="email" placeholder="clan@route-book.be"></div>'+
+      '<div class="lf"><label>Mot de passe / Wachtwoord</label>'+
+        '<input type="password" id="li-pass" autocomplete="current-password" placeholder="\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7"></div>'+
+      '<button id="btn-login">Connexion / Inloggen</button>'+
+      '<div class="login-err" id="li-err"></div>';
+    document.getElementById('btn-login').addEventListener('click', doLogin);
+    document.getElementById('li-pass').addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
+    document.getElementById('li-email').addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
+    showScreen('login-screen');
+    return;
+  }
+  setLoading('Chargement du profil…');
+  db.ref('users/'+user.uid).once('value').then(function(snap){
+    var p = snap.val();
+    if(!p){
+      auth.signOut();
+      showScreen('login-screen');
+      document.getElementById('li-err').textContent = 'Compte non configuré. Contactez l\'admin.';
+      return;
+    }
+    currentUser = {uid:user.uid, email:user.email, role:p.role, clanId:p.clanId};
+    if(p.role==='clan' && p.clanId){
+      clanId = p.clanId;
+      try{sessionStorage.setItem('rb_clan',clanId);}catch(e){}
+      loadTemplate();
+    } else {
+      var saved=''; try{saved=sessionStorage.getItem('rb_clan')||'';}catch(e){}
+      if(saved){ clanId=saved; loadTemplate(); }
+      else { showClanPicker(); }
+    }
+  }).catch(function(e){ setLoading('⚠ '+e.message); });
+}
+
+// ── Sélecteur de clan (ENR / commissaire / admin) ─────────────────────
+function showClanPicker(){
+  showScreen('login-screen');
+  var box = document.querySelector('.login-box');
+  box.innerHTML =
+    '<h1>Route-Book</h1>'+
+    '<div style="font-family:\'Courier New\',monospace;font-size:.72rem;letter-spacing:.06em;color:var(--tl);margin-bottom:16px;text-align:center">'+
+      escH(currentUser.email)+' · '+currentUser.role+
+    '</div>'+
+    '<div style="font-family:\'Courier New\',monospace;font-size:.7rem;letter-spacing:.07em;text-transform:uppercase;color:var(--tl);margin-bottom:10px">Choisir un clan / Kies een clan</div>'+
+    '<div id="clan-btns" style="display:flex;flex-direction:column;gap:10px"></div>'+
+    '<button onclick="try{sessionStorage.removeItem(\'rb_clan\');}catch(e){}auth.signOut()" style="margin-top:16px;width:100%;background:transparent;border:1px solid var(--bo);color:var(--tl);padding:9px;border-radius:4px;font-family:\'Courier New\',monospace;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">⏻ Déconnexion</button>';
+  var btns = document.getElementById('clan-btns');
+  KNOWN_CLANS.forEach(function(c){
+    var b=document.createElement('button');
+    b.id='btn-login'; b.style.marginBottom='0';
+    b.textContent=c.label;
+    b.onclick=function(){
+      clanId=c.id;
+      try{sessionStorage.setItem('rb_clan',clanId);}catch(e){}
+      loadTemplate();
+    };
+    btns.appendChild(b);
+  });
+}
+
+// ── Charger le template ────────────────────────────────────────────────
+function loadTemplate(){
+  setLoading('Chargement du dossier…');
+  db.ref('template/html').once('value').then(function(snap){
+    var html = snap.val();
+    if(!html){ setLoading('⚠ Aucun template. Allez sur admin.html pour en déposer un.'); return; }
+    var wrap = document.getElementById('dossier-screen');
+    wrap.innerHTML = html;
+    // CSS d'intégration
+    var s = document.createElement('style');
+    s.textContent = [
+      'html,body{height:auto!important;overflow:visible!important}',
+      'body{overflow-y:scroll!important}',
+      '#topbar{position:sticky!important;top:0!important;z-index:100!important}',
+      '#layout{overflow:visible!important;height:auto!important;min-height:calc(100vh - 56px)}',
+      '#sb{position:sticky!important;top:56px!important;height:calc(100vh - 56px)!important;overflow-y:auto!important;flex-shrink:0!important}',
+      '#mn{overflow:visible!important;height:auto!important;flex:1!important}',
+      '.sbl{display:none!important}'
+    ].join('');
+    document.head.appendChild(s);
+    // Exécuter les scripts du template
+    // Intercepter window.onload pour l'empêcher de se déclencher automatiquement
+    var _templateOnload = null;
+    var _origOnload = window.onload;
+    Object.defineProperty(window, 'onload', {
+      configurable: true,
+      set: function(fn){ _templateOnload = fn; },
+      get: function(){ return _origOnload; }
+    });
+
+    var scripts = Array.from(wrap.querySelectorAll('script'));
+    function runNext(){
+      if(!scripts.length){
+        // Restaurer window.onload normal
+        try{ Object.defineProperty(window,'onload',{configurable:true,writable:true,value:_origOnload}); }catch(e){}
+        // hookSave AVANT le onload du template (sinon le bouton Enregistrer ouvre l'explorateur)
+        hookSave();
+        // Appeler le onload du template manuellement
+        if(typeof _templateOnload==='function'){
+          try{ _templateOnload(); }catch(e){ console.warn('template onload error',e); }
+        }
+        onTemplateReady();
+        return;
+      }
+      var old = scripts.shift();
+      var ns = document.createElement('script');
+      if(old.src){ ns.src=old.src; ns.onload=runNext; document.head.appendChild(ns); }
+      else{ ns.textContent=old.textContent; document.head.appendChild(ns); runNext(); }
+      old.parentNode.removeChild(old);
+    }
+    runNext();
+  }).catch(function(e){ setLoading('⚠ '+e.message); });
+}
+
+// ── Template prêt ─────────────────────────────────────────────────────
+function onTemplateReady(){
+  db.ref('dossiers/'+clanId+'/current').once('value').then(function(snap){
+    var data = snap.val();
+    if(data) applyData(data);
+    showScreen('dossier-screen');
+    addTopbarButtons();
+    if(typeof go==='function'){ go('cov', document.querySelector('[data-pg="cov"]')); }
+    loadHistory();
+  });
+}
+
+// ── Appliquer les données ─────────────────────────────────────────────
+function applyData(data){
+  if(!data) return;
+  if(data.fields) Object.keys(data.fields).forEach(function(id){
+    var el=document.getElementById(id); if(!el) return;
+    if(el.type==='checkbox'||el.type==='radio') el.checked=!!data.fields[id];
+    else{ el.value=data.fields[id]; if(data.fields[id]) el.classList.add('ok'); }
+  });
+  if(data.state && typeof state!=='undefined'){
+    ['days','maitrise','referents','equipes','services','contacts84','transports','done'].forEach(function(k){
+      if(data.state[k]!==undefined) state[k]=data.state[k];
+    });
+    if(data.state._lang && typeof LANG!=='undefined') LANG=data.state._lang;
+  }
+  ['renderM','renderR','renderEquipes','renderContacts84','renderTr','renderDays',
+   'calcTotals','calcB','applyLang','updProg'].forEach(function(fn){
+    if(typeof window[fn]==='function') try{window[fn]();}catch(e){}
+  });
+  var c=document.getElementById('cvclan'), cnd=document.getElementById('cnd');
+  if(c&&cnd&&c.value) cnd.textContent=c.value;
+}
+
+// ── Collecte des données ──────────────────────────────────────────────
+function collectData(){
+  var fields={};
+  document.querySelectorAll('input[id],textarea[id],select[id]').forEach(function(el){
+    if(!el.id||el.closest('#hist-panel')||el.closest('#login-screen')) return;
+    if(el.closest('#mlist')||el.closest('#rlist')||el.closest('#equipeslist')||
+       el.closest('#contacts84body')||el.closest('#tr_tbody')||el.closest('#dmb2')) return;
+    if(el.type==='checkbox'||el.type==='radio') fields[el.id]=el.checked?1:0;
+    else fields[el.id]=el.value;
+  });
+  if(typeof state!=='undefined') state._lang=typeof LANG!=='undefined'?LANG:'fr';
+  return {fields:fields, state:typeof state!=='undefined'?state:{}, savedAt:Date.now(), savedBy:currentUser.email};
+}
+
+// ── Sauvegarde Firebase ───────────────────────────────────────────────
+function hookSave(){
+  // Remplacer autoSave (déclenché à chaque saisie via up())
+  window.autoSave=function(){
+    clearTimeout(saveTimer);
+    saveTimer=setTimeout(function(){ fbSave(true); }, DEBOUNCE);
+  };
+  // Remplacer saveAll (bouton Enregistrer)
+  window.saveAll=function(silent){ clearTimeout(saveTimer); fbSave(silent); };
+  // Patcher le bouton directement (au cas où onclick est déjà câblé)
+  var btn=document.getElementById('btn-save');
+  if(btn){
+    btn.removeAttribute('onclick');
+    btn.addEventListener('click',function(){ fbSave(false); });
+  }
+  // Aussi patcher onSaveBtn si présent
+  window.onSaveBtn=function(){ fbSave(false); };
+  // Intercepter resetAll pour sauvegarder le dossier vide
+  var _origReset=window.resetAll;
+  window.resetAll=function(){
+    if(_origReset) _origReset();
+    setTimeout(function(){ fbSave(true); }, 300);
+  };
+}
+
+function fbSave(silent){
+  if(!currentUser||!clanId){ console.warn('fbSave: pas de session'); return; }
+  var data=collectData();
+  var ref=db.ref('dossiers/'+clanId);
+  ref.child('current').set(data).then(function(){
+    if(!silent){
+      if(typeof toast==='function') toast('☁ Sauvegardé');
+      else showFbToast('☁ Sauvegardé');
+    }
+    ref.child('history/'+data.savedAt).set(data);
+    ref.child('history').orderByKey().once('value').then(function(s){
+      var keys=[]; s.forEach(function(c){keys.push(c.key);});
+      if(keys.length>100){
+        var upd={};
+        keys.slice(0,keys.length-100).forEach(function(k){upd['dossiers/'+clanId+'/history/'+k]=null;});
+        db.ref().update(upd);
+      }
+    });
+    loadHistory();
+  }).catch(function(e){
+    console.error('fbSave',e);
+    if(typeof toast==='function') toast('⚠ Erreur : '+e.message);
+  });
+}
+
+// ── Boutons dans la topbar ────────────────────────────────────────────
+function addTopbarButtons(){
+  var enrBtn=document.querySelector('#topbar .tbe');
+  if(!enrBtn) return;
+  var tbStyle="font-family:'Special Elite',cursive;font-size:.8rem;padding:6px 13px;border-radius:4px;cursor:pointer;flex-shrink:0;background:transparent;border:1px solid rgba(201,151,58,.35);color:rgba(246,241,227,.8)";
+  var bh=document.createElement('button');
+  bh.className='tb'; bh.title='Historique'; bh.textContent='🕐 Hist.';
+  bh.setAttribute('style',tbStyle);
+  bh.onclick=toggleHist;
+  var bl=document.createElement('button');
+  bl.className='tb'; bl.title='Déconnexion'; bl.textContent='⏻';
+  bl.setAttribute('style',tbStyle+';color:#e07070;border-color:rgba(220,100,100,.4)');
+  bl.onclick=function(){
+  if(confirm('Se déconnecter ?')){
+    try{sessionStorage.removeItem('rb_clan');}catch(e){}
+    auth.signOut();
+  }
+};
+  enrBtn.parentNode.insertBefore(bh,enrBtn);
+  enrBtn.parentNode.insertBefore(bl,enrBtn);
+}
+
+// ── Historique ────────────────────────────────────────────────────────
+function loadHistory(){
+  if(!clanId) return;
+  db.ref('dossiers/'+clanId+'/history').orderByKey().limitToLast(50).once('value',function(snap){
+    var items=[];
+    snap.forEach(function(c){ items.push({key:c.key,val:c.val()}); });
+    items.reverse();
+    var list=document.getElementById('hist-list');
+    if(!items.length){ list.innerHTML='<div class="hempty">Aucune version.<br><small>Apparaît 3s après la première saisie.</small></div>'; return; }
+    list.innerHTML=items.map(function(item,i){
+      return '<div class="hitem'+(i===0?' cur':'')+'">'
+        +'<div class="hdate">'+fmtDate(parseInt(item.key))+'</div>'
+        +'<div class="hby">'+escH(item.val.savedBy||'—')+'</div>'
+        +(i===0?'<span style="font-family:\'Courier New\',monospace;font-size:.6rem;color:var(--tl)">version actuelle</span>'
+               :'<button class="hbtn" onclick="restoreVersion(\''+item.key+'\')">↩ Restaurer</button>')
+        +'</div>';
+    }).join('');
+  });
+}
+
+function toggleHist(){
+  histOpen=!histOpen;
+  document.getElementById('hist-panel').classList.toggle('open',histOpen);
+  var b=document.getElementById('btn-hist-tpl');
+  if(b) b.style.background=histOpen?'rgba(201,151,58,.25)':'transparent';
+  if(histOpen) loadHistory();
+}
+
+function restoreVersion(key){
+  if(!confirm('Restaurer cette version ?')) return;
+  db.ref('dossiers/'+clanId+'/history/'+key).once('value').then(function(snap){
+    var data=snap.val(); if(!data) return;
+    applyData(data);
+    var n=JSON.parse(JSON.stringify(data));
+    n.savedAt=Date.now(); n.savedBy=currentUser.email+' (restauration)';
+    db.ref('dossiers/'+clanId+'/current').set(n);
+    db.ref('dossiers/'+clanId+'/history/'+n.savedAt).set(n);
+    if(typeof toast==='function') toast('Version restaurée !');
+    toggleHist(); loadHistory();
+  });
+}
+</script>
+</body>
+</html>

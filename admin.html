@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin — Dossier de Route</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--g:#2f4a24;--go:#c9973a;--cr:#f6f1e3;--tl:#6b6353;--bo:#b9ab8d;--red:#b03030}
+body{font-family:'Georgia',serif;background:#f0ece0;color:#2a1f12;min-height:100vh}
+#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 60% 40%,#3a5c2e 0%,#1e2f16 100%)}
+.login-box{background:var(--cr);border:2px solid var(--go);border-radius:10px;max-width:380px;width:100%;padding:32px;box-shadow:0 8px 40px rgba(0,0,0,.4)}
+.login-box h1{font-size:1.4rem;font-weight:normal;color:var(--g);text-align:center;margin-bottom:20px}
+.field{margin-bottom:14px}
+.field label{display:block;font-family:'Courier New',monospace;font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--tl);margin-bottom:4px}
+.field input,.field select{width:100%;padding:9px 11px;border:1.5px solid var(--bo);border-radius:4px;font-size:15px;font-family:inherit;background:#fff}
+.field input:focus,.field select:focus{outline:none;border-color:var(--g)}
+.btn{background:var(--g);color:var(--cr);border:none;padding:9px 18px;border-radius:4px;font-family:'Courier New',monospace;font-size:.75rem;letter-spacing:.07em;text-transform:uppercase;cursor:pointer}
+.btn:hover{background:#3d6030}
+.btn.sec{background:transparent;color:var(--g);border:1.5px solid var(--g)}
+.btn.sec:hover{background:rgba(47,74,36,.08)}
+.btn.danger{background:var(--red)}
+.btn.danger:hover{background:#8b2020}
+.err{color:var(--red);font-size:.82rem;margin-top:8px}
+
+/* Layout admin */
+#admin-app{display:none;flex-direction:column;min-height:100vh}
+header{background:var(--g);border-bottom:2px solid var(--go);padding:0 20px;height:52px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+header h1{font-family:'Courier New',monospace;font-size:.85rem;letter-spacing:.1em;text-transform:uppercase;color:var(--go)}
+.main{display:grid;grid-template-columns:200px 1fr;flex:1}
+nav{background:var(--g);padding:16px 0;border-right:2px solid var(--go)}
+.nav-item{display:block;width:100%;padding:11px 18px;background:transparent;border:none;color:rgba(246,241,227,.7);font-family:'Courier New',monospace;font-size:.72rem;letter-spacing:.07em;text-transform:uppercase;cursor:pointer;text-align:left;transition:background .12s,color .12s}
+.nav-item:hover{background:rgba(201,151,58,.15);color:var(--cr)}
+.nav-item.active{background:rgba(201,151,58,.25);color:var(--go);border-right:2px solid var(--go)}
+.content{padding:28px;overflow-y:auto}
+
+.panel{display:none}.panel.active{display:block}
+.panel h2{font-size:1.1rem;font-weight:normal;color:var(--g);margin-bottom:20px;padding-bottom:8px;border-bottom:2px solid var(--go)}
+.card{background:#fff;border:1px solid var(--bo);border-radius:6px;padding:18px;margin-bottom:14px}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.card-title{font-family:'Courier New',monospace;font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--tl)}
+.badge{display:inline-block;padding:2px 8px;border-radius:3px;font-family:'Courier New',monospace;font-size:.65rem;letter-spacing:.06em;text-transform:uppercase}
+.badge.clan{background:#e8f0e3;color:var(--g);border:1px solid var(--g)}
+.badge.enr{background:#fef3e2;color:#8b5e0a;border:1px solid var(--go)}
+.badge.comm{background:#e8eef8;color:#1a3a6e;border:1px solid #1a3a6e}
+.badge.admin{background:#f8e8e8;color:var(--red);border:1px solid var(--red)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+table{width:100%;border-collapse:collapse;font-size:.88rem}
+th{font-family:'Courier New',monospace;font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;color:var(--tl);border-bottom:2px solid var(--bo);padding:8px 10px;text-align:left}
+td{padding:9px 10px;border-bottom:1px solid #eee}
+tr:hover td{background:#faf7f0}
+.drop-zone{border:2px dashed var(--bo);border-radius:8px;padding:32px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;background:#fafaf7}
+.drop-zone:hover,.drop-zone.over{border-color:var(--g);background:#f0f5ea}
+.drop-zone p{color:var(--tl);font-size:.88rem;margin-top:8px}
+.drop-zone .icon{font-size:2rem}
+.template-info{background:#f0f5ea;border:1px solid var(--g);border-radius:5px;padding:12px 16px;margin-top:14px;font-size:.84rem;display:none}
+
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--g);color:var(--cr);padding:9px 20px;border-radius:5px;font-family:'Courier New',monospace;font-size:.75rem;letter-spacing:.06em;opacity:0;transition:all .3s;z-index:9999;white-space:nowrap}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-box">
+    <h1>Administration</h1>
+    <div class="field"><label>Email</label><input type="email" id="li-email" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="field"><label>Mot de passe</label><input type="password" id="li-pass" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn" onclick="doLogin()" style="width:100%">Connexion</button>
+    <div class="err" id="li-err"></div>
+  </div>
+</div>
+
+<div id="admin-app">
+  <header>
+    <h1>⚙ Admin — Dossier de Route</h1>
+    <button class="btn sec" onclick="auth.signOut()" style="padding:6px 14px;font-size:.68rem">Déconnexion</button>
+  </header>
+  <div class="main">
+    <nav>
+      <button class="nav-item active" onclick="showPanel('panel-users',this)">👥 Utilisateurs</button>
+      <button class="nav-item" onclick="showPanel('panel-template',this)">📄 Template</button>
+      <button class="nav-item" onclick="showPanel('panel-clans',this)">🗂 Clans</button>
+      <button class="nav-item" onclick="showPanel('panel-hist',this)">🕐 Historique</button>
+    </nav>
+    <div class="content">
+
+      <!-- Utilisateurs -->
+      <div class="panel active" id="panel-users">
+        <h2>Utilisateurs</h2>
+        <div style="margin-bottom:16px">
+          <button class="btn" onclick="showAddUser()">+ Ajouter un utilisateur</button>
+        </div>
+
+        <div class="card" id="add-user-form" style="display:none;background:#f8f5ee;border:1.5px solid var(--go)">
+          <div class="card-title" style="margin-bottom:14px">Nouvel utilisateur</div>
+          <div class="row">
+            <div class="field" style="flex:1;min-width:200px"><label>Email</label><input type="email" id="nu-email" placeholder="clan.damiaan@..."></div>
+            <div class="field" style="flex:1;min-width:160px"><label>Mot de passe</label><input type="password" id="nu-pass" placeholder="••••••••"></div>
+          </div>
+          <div class="row">
+            <div class="field" style="flex:1"><label>Nom affiché</label><input type="text" id="nu-name" placeholder="Clan Damiaan"></div>
+            <div class="field" style="flex:1"><label>Rôle</label>
+              <select id="nu-role" onchange="toggleClanField()">
+                <option value="clan">clan</option>
+                <option value="enr">enr</option>
+                <option value="comm">commissaire</option>
+                <option value="admin">admin</option>
+              </select>
+            </div>
+            <div class="field" id="nu-clan-wrap" style="flex:1"><label>Clan</label>
+              <select id="nu-clan"></select>
+            </div>
+          </div>
+          <div class="row">
+            <button class="btn" onclick="createUser()">Créer</button>
+            <button class="btn sec" onclick="document.getElementById('add-user-form').style.display='none'">Annuler</button>
+            <span class="err" id="nu-err"></span>
+          </div>
+        </div>
+
+        <table id="users-table">
+          <thead><tr><th>Email</th><th>Nom</th><th>Rôle</th><th>Clan</th><th>Actions</th></tr></thead>
+          <tbody id="users-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- Template -->
+      <div class="panel" id="panel-template">
+        <h2>Template du dossier de route</h2>
+        <p style="font-size:.88rem;color:var(--tl);margin-bottom:16px">
+          Déposez ici la nouvelle version du fichier <code>index.html</code> du dossier de route. Tous les clans verront la nouvelle version au prochain chargement. Leurs données ne sont pas effacées.
+        </p>
+        <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()"
+             ondragover="event.preventDefault();this.classList.add('over')"
+             ondragleave="this.classList.remove('over')"
+             ondrop="onFileDrop(event)">
+          <div class="icon">📄</div>
+          <p>Glissez le fichier HTML ici ou cliquez pour choisir</p>
+        </div>
+        <input type="file" id="file-input" accept=".html" style="display:none" onchange="onFileSelect(event)">
+        <div class="template-info" id="tpl-info"></div>
+      </div>
+
+      <!-- Clans -->
+      <div class="panel" id="panel-clans">
+        <h2>Clans</h2>
+        <div class="card" style="margin-bottom:16px;background:#f8f5ee;border:1.5px solid var(--go)">
+          <div class="card-title" style="margin-bottom:12px">Ajouter un clan</div>
+          <div class="row">
+            <div class="field" style="flex:1"><label>ID (slug)</label><input type="text" id="nc-id" placeholder="clan-nouveau"></div>
+            <div class="field" style="flex:1"><label>Nom affiché</label><input type="text" id="nc-label" placeholder="Clan Nouveau"></div>
+            <button class="btn" onclick="addClan()">Ajouter</button>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th>ID</th><th>Nom</th><th>Lien</th><th>Actions</th></tr></thead>
+          <tbody id="clans-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- Historique -->
+      <div class="panel" id="panel-hist">
+        <h2>Historique des dossiers</h2>
+        <div class="row" style="margin-bottom:16px">
+          <label style="font-family:'Courier New',monospace;font-size:.72rem;letter-spacing:.07em;text-transform:uppercase;color:var(--tl)">Clan :</label>
+          <select id="hist-clan-sel" onchange="loadAdminHistory()" style="padding:7px 10px;border:1.5px solid var(--bo);border-radius:4px;font-size:.9rem"></select>
+        </div>
+        <table>
+          <thead><tr><th>Date</th><th>Par</th><th>Actions</th></tr></thead>
+          <tbody id="hist-tbody"></tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="firebase-config.js"></script>
+<script>
+firebase.initializeApp(FIREBASE_CONFIG);
+const auth = firebase.auth();
+const db   = firebase.database();
+var clansCache = {};
+
+function doLogin(){
+  var e=document.getElementById('li-email').value.trim();
+  var p=document.getElementById('li-pass').value;
+  var err=document.getElementById('li-err');
+  err.textContent='';
+  auth.signInWithEmailAndPassword(e,p).catch(function(ex){
+    err.textContent = ex.code==='auth/wrong-password'||ex.code==='auth/user-not-found'
+      ? 'Email ou mot de passe incorrect.' : ex.message;
+  });
+}
+
+auth.onAuthStateChanged(function(user){
+  if(!user){ document.getElementById('login-screen').style.display='flex'; document.getElementById('admin-app').style.display='none'; return; }
+  db.ref('users/'+user.uid).once('value').then(function(snap){
+    var p=snap.val();
+    if(!p||p.role!=='admin'){ auth.signOut(); document.getElementById('li-err').textContent='Accès admin uniquement.'; return; }
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('admin-app').style.display='flex';
+    loadClans(); loadUsers(); loadTemplateInfo();
+  });
+});
+
+function showPanel(id,btn){
+  document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('active');});
+  document.querySelectorAll('.nav-item').forEach(function(b){b.classList.remove('active');});
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+  if(id==='panel-hist') loadAdminHistory();
+}
+
+// ── Clans ──────────────────────────────────────────────────────────────
+function loadClans(){
+  db.ref('clans').on('value',function(snap){
+    clansCache={};
+    var tbody=document.getElementById('clans-tbody');
+    var sel=document.getElementById('nu-clan');
+    var histSel=document.getElementById('hist-clan-sel');
+    tbody.innerHTML=''; sel.innerHTML=''; histSel.innerHTML='';
+    var rows=[];
+    snap.forEach(function(c){ rows.push({id:c.key,val:c.val()}); clansCache[c.key]=c.val().label||c.key; });
+    // Ajouter les clans connus s'ils ne sont pas encore dans Firebase
+    KNOWN_CLANS.forEach(function(kc){
+      if(!clansCache[kc.id]){
+        db.ref('clans/'+kc.id).set({label:kc.label,createdAt:Date.now()});
+      }
+    });
+    rows.forEach(function(r){
+      tbody.innerHTML+='<tr><td><code>'+r.id+'</code></td><td>'+escH(r.val.label||r.id)+'</td>'+
+        '<td><a href="index.html?clan='+r.id+'" target="_blank" style="color:var(--g);font-size:.8rem">index.html?clan='+r.id+'</a></td>'+
+        '<td><button class="btn danger" style="padding:4px 10px;font-size:.65rem" onclick="deleteClan(\''+r.id+'\')">Supprimer</button></td></tr>';
+      sel.innerHTML+='<option value="'+r.id+'">'+escH(r.val.label||r.id)+'</option>';
+      histSel.innerHTML+='<option value="'+r.id+'">'+escH(r.val.label||r.id)+'</option>';
+    });
+  });
+}
+
+function addClan(){
+  var id=(document.getElementById('nc-id').value||'').trim().toLowerCase().replace(/\s+/g,'-');
+  var label=(document.getElementById('nc-label').value||'').trim();
+  if(!id||!label){ toast('Remplissez les deux champs.'); return; }
+  db.ref('clans/'+id).set({label:label,createdAt:Date.now()}).then(function(){ toast('Clan ajouté.'); document.getElementById('nc-id').value=''; document.getElementById('nc-label').value=''; });
+}
+
+function deleteClan(id){
+  if(!confirm('Supprimer le clan '+id+' ? (les données du dossier seront conservées)')) return;
+  db.ref('clans/'+id).remove().then(function(){ toast('Supprimé.'); });
+}
+
+// ── Utilisateurs ──────────────────────────────────────────────────────
+function loadUsers(){
+  db.ref('users').on('value',function(snap){
+    var tbody=document.getElementById('users-tbody');
+    tbody.innerHTML='';
+    snap.forEach(function(c){
+      var u=c.val(),uid=c.key;
+      tbody.innerHTML+='<tr>'+
+        '<td style="font-size:.82rem">'+escH(u.email||uid)+'</td>'+
+        '<td>'+escH(u.nom||'—')+'</td>'+
+        '<td><span class="badge '+u.role+'">'+u.role+'</span></td>'+
+        '<td>'+escH(u.clanLabel||u.clanId||'—')+'</td>'+
+        '<td><button class="btn danger" style="padding:4px 10px;font-size:.65rem" onclick="deleteUser(\''+uid+'\')">Suppr.</button></td>'+
+        '</tr>';
+    });
+  });
+}
+
+function showAddUser(){
+  document.getElementById('add-user-form').style.display='block';
+  toggleClanField();
+}
+function toggleClanField(){
+  var role=document.getElementById('nu-role').value;
+  document.getElementById('nu-clan-wrap').style.display=role==='clan'?'block':'none';
+}
+
+function createUser(){
+  var email=(document.getElementById('nu-email').value||'').trim();
+  var pass=document.getElementById('nu-pass').value;
+  var nom=(document.getElementById('nu-name').value||'').trim();
+  var role=document.getElementById('nu-role').value;
+  var clanId=document.getElementById('nu-clan').value;
+  var clanLabel=clansCache[clanId]||clanId;
+  var err=document.getElementById('nu-err');
+  err.textContent='';
+  if(!email||!pass){ err.textContent='Email et mot de passe requis.'; return; }
+
+  // Créer via Firebase Auth REST (depuis admin, on ne peut pas utiliser createUser
+  // sans Firebase Admin SDK côté serveur — on utilise un second app temporaire)
+  var tempApp = firebase.initializeApp(FIREBASE_CONFIG, 'temp_'+Date.now());
+  var tempAuth = tempApp.auth();
+  tempAuth.createUserWithEmailAndPassword(email, pass)
+    .then(function(cred){
+      var uid=cred.user.uid;
+      var profile={email:email,nom:nom,role:role,createdAt:Date.now()};
+      if(role==='clan'&&clanId){ profile.clanId=clanId; profile.clanLabel=clanLabel||clanId; }
+      return db.ref('users/'+uid).set(profile);
+    })
+    .then(function(){
+      toast('Utilisateur créé !');
+      document.getElementById('add-user-form').style.display='none';
+      tempAuth.signOut(); tempApp.delete();
+    })
+    .catch(function(e){ err.textContent=e.message; tempApp.delete(); });
+}
+
+function deleteUser(uid){
+  if(!confirm('Supprimer cet utilisateur de la base ? (son compte Firebase Auth reste — supprimez-le manuellement dans la console Firebase si nécessaire)')) return;
+  db.ref('users/'+uid).remove().then(function(){ toast('Supprimé de la base.'); });
+}
+
+// ── Template ──────────────────────────────────────────────────────────
+function loadTemplateInfo(){
+  db.ref('template/meta').once('value').then(function(snap){
+    var m=snap.val();
+    var info=document.getElementById('tpl-info');
+    if(m){ info.style.display='block'; info.innerHTML='<strong>Version actuelle</strong><br>Déposée le '+fmtDate(m.updatedAt)+' par '+escH(m.updatedBy)+'<br>Taille : '+(m.size/1024).toFixed(1)+' KB'; }
+  });
+}
+
+function onFileDrop(e){ e.preventDefault(); document.getElementById('drop-zone').classList.remove('over'); handleFile(e.dataTransfer.files[0]); }
+function onFileSelect(e){ handleFile(e.target.files[0]); }
+function handleFile(file){
+  if(!file||!file.name.endsWith('.html')){ toast('Fichier HTML requis.'); return; }
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var html=e.target.result;
+    var size=html.length;
+    db.ref('template').update({
+      html: html,
+      meta: { updatedAt:Date.now(), updatedBy:auth.currentUser.email, size:size, filename:file.name }
+    }).then(function(){
+      toast('Template mis à jour ! Les clans verront la nouvelle version au prochain chargement.');
+      loadTemplateInfo();
+    }).catch(function(ex){ toast('Erreur : '+ex.message); });
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+// ── Historique admin ─────────────────────────────────────────────────
+function loadAdminHistory(){
+  var clanId=document.getElementById('hist-clan-sel').value;
+  if(!clanId) return;
+  db.ref('dossiers/'+clanId+'/history').orderByKey().limitToLast(50).once('value',function(snap){
+    var tbody=document.getElementById('hist-tbody');
+    tbody.innerHTML='';
+    var items=[];
+    snap.forEach(function(c){ items.push({key:c.key,val:c.val()}); });
+    items.reverse();
+    if(!items.length){ tbody.innerHTML='<tr><td colspan="3" style="color:var(--tl);font-style:italic;padding:12px">Aucune version.</td></tr>'; return; }
+    items.forEach(function(item,i){
+      tbody.innerHTML+='<tr>'+
+        '<td style="font-family:\'Courier New\',monospace;font-size:.78rem">'+fmtDate(parseInt(item.key))+'</td>'+
+        '<td style="font-size:.82rem">'+escH(item.val.savedBy||'—')+'</td>'+
+        '<td>'+
+          (i>0?'<button class="btn sec" style="padding:4px 10px;font-size:.65rem" onclick="adminRestore(\''+clanId+'\',\''+item.key+'\')">↩ Restaurer</button> ':'')+
+          '<button class="btn" style="padding:4px 10px;font-size:.65rem" onclick="adminExport(\''+clanId+'\',\''+item.key+'\')">⬇ Export</button>'+
+        '</td></tr>';
+    });
+  });
+}
+
+function adminRestore(clanId,key){
+  if(!confirm('Restaurer cette version comme version courante du clan '+clanId+' ?')) return;
+  db.ref('dossiers/'+clanId+'/history/'+key).once('value').then(function(snap){
+    var data=snap.val(); if(!data){ toast('Introuvable.'); return; }
+    var ts=Date.now();
+    data.savedBy=auth.currentUser.email+' (restauration admin)';
+    data.savedAt=ts;
+    db.ref('dossiers/'+clanId+'/current').set(data);
+    db.ref('dossiers/'+clanId+'/history/'+ts).set(data);
+    toast('Restauré !');
+    loadAdminHistory();
+  });
+}
+
+function adminExport(clanId,key){
+  db.ref('template/html').once('value').then(function(tSnap){
+    var html=tSnap.val(); if(!html){ toast('Pas de template.'); return; }
+    db.ref('dossiers/'+clanId+'/history/'+key).once('value').then(function(dSnap){
+      var data=dSnap.val(); if(!data){ toast('Introuvable.'); return; }
+      var stateScript='<script>window.__PRELOAD__='+JSON.stringify(data)+';<\/script>';
+      var exportHtml=html.replace('</head>',stateScript+'</head>');
+      var blob=new Blob([exportHtml],{type:'text/html;charset=utf-8'});
+      var a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download='routedossier-'+clanId+'-'+fmtDate(parseInt(key)).replace(/[/ :]/g,'-')+'.html';
+      a.click();
+    });
+  });
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+function fmtDate(ts){ if(!ts) return '—'; var d=new Date(ts); return d.toLocaleDateString('fr-BE')+' '+d.toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'}); }
+function escH(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function toast(msg){ var t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(function(){ t.classList.remove('show'); },3000); }
+</script>
+</body>
+</html>
