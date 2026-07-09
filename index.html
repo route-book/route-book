@@ -286,12 +286,12 @@ function loadTemplate(){
       if(!scripts.length){
         // Restaurer window.onload normal
         try{ Object.defineProperty(window,'onload',{configurable:true,writable:true,value:_origOnload}); }catch(e){}
-        // hookSave AVANT le onload du template (sinon le bouton Enregistrer ouvre l'explorateur)
-        hookSave();
         // Appeler le onload du template manuellement
         if(typeof _templateOnload==='function'){
           try{ _templateOnload(); }catch(e){ console.warn('template onload error',e); }
         }
+        // hookSave APRÈS le onload : saveAll original est maintenant défini
+        hookSave();
         onTemplateReady();
         return;
       }
