@@ -93,7 +93,7 @@ var KNOWN_CLANS = [
 
 // ── État ──────────────────────────────────────────────────────────────
 var auth, db, currentUser, clanId, saveTimer, histOpen=false;
-var DEBOUNCE = 3000;
+var DEBOUNCE = 1000;
 
 // ── Utilitaires ───────────────────────────────────────────────────────
 function showScreen(id){
@@ -355,22 +355,14 @@ function collectData(){
 
 // ── Sauvegarde Firebase ───────────────────────────────────────────────
 function hookSave(){
-  // Remplacer autoSave (déclenché à chaque saisie via up())
+  // autoSave Firebase en arrière-plan (1s après chaque saisie)
   window.autoSave=function(){
     clearTimeout(saveTimer);
     saveTimer=setTimeout(function(){ fbSave(true); }, DEBOUNCE);
   };
-  // Remplacer saveAll (bouton Enregistrer)
-  window.saveAll=function(silent){ clearTimeout(saveTimer); fbSave(silent); };
-  // Patcher le bouton directement (au cas où onclick est déjà câblé)
-  var btn=document.getElementById('btn-save');
-  if(btn){
-    btn.removeAttribute('onclick');
-    btn.addEventListener('click',function(){ fbSave(false); });
-  }
-  // Aussi patcher onSaveBtn si présent
-  window.onSaveBtn=function(){ fbSave(false); };
-  // Intercepter resetAll pour sauvegarder le dossier vide
+  // saveAll = comportement ORIGINAL (export fichier) — on ne le remplace pas
+  // Firebase est sauvegardé uniquement via autoSave en arrière-plan
+  // Intercepter resetAll pour aussi sauvegarder le dossier vide dans Firebase
   var _origReset=window.resetAll;
   window.resetAll=function(){
     if(_origReset) _origReset();
